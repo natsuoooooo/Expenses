@@ -156,3 +156,68 @@ pub fn category_totals_by_kind(
     }
     Ok(v)
 }
+
+pub struct PeriodSummary {
+    pub start_month: String,
+    pub end_month: String,
+    pub income: i64,
+    pub expense: i64,
+    pub balance: i64,
+}
+
+pub fn summary_in_range(conn: &Connection, start_ym: &str, end_ym: &str) -> rusqlite::Result<PeriodSummary> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT
+            SUM(CASE WHEN kind = 1 THEN amount ELSE 0 END) AS income,
+            SUM(CASE WHEN kind = 0 THEN amount ELSE 0 END) AS expense
+        FROM entries
+        WHERE substr(created_at, 1, 7) BETWEEN ?1 AND ?2
+        "#,
+    )?;
+
+    let (income_opt, expense_opt): (Option<i64>, Option<i64>) =
+        stmt.query_row(params![start_ym, end_ym], |row| Ok((row.get(0)?, row.get(1)?)))?;
+
+    let income = income_opt.unwrap_or(0);
+    let expense = expense_opt.unwrap_or(0);
+
+    Ok(PeriodSummary {
+        start_month: start_ym.to_string(),
+        end_month: end_ym.to_string(),
+        income,
+        expense,
+        balance: income - expense,
+    })
+}
+
+pub fn category_totals_by_kind_in_range(
+    conn: &Connection,
+    start_ym: &str,
+    end_ym: &str,
+    kind: Kind, // Kind::Expense or Kind::Income
+) -> rusqlite::Result<Vec<CategoryTotal>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT category, SUM(amount) AS total
+        FROM entries
+        WHERE kind = ?3 AND substr(created_at, 1, 7) BETWEEN ?1 AND ?2
+        GROUP BY category
+        ORDER BY total DESC, category ASC
+        "#,
+    )?;
+
+    let rows = stmt.query_map(params![start_ym, end_ym, kind.to_i64()], |row| {
+        Ok(CategoryTotal {
+            category: row.get(0)?,
+            total: row.get(1)?,
+        })
+    })?;
+
+    let mut v = Vec::new();
+    for r in rows {
+        v.push(r?);
+    }
+    Ok(v)
+}
+
