@@ -61,3 +61,18 @@ cargo run -p cli -- report category --both
 # For a specific month
 cargo run -p cli -- report category 2025-08 --both
 ```
+
+### Range summary
+```bash
+# Summary and category totals across multiple months
+cargo run -p cli -- report range 2025-06..2025-08
+
+# Expense only (default)
+cargo run -p cli -- report range 2025-06..2025-08 --expense
+
+# Income only
+cargo run -p cli -- report range 2025-06..2025-08 --income
+
+# Both (expense + income)
+cargo run -p cli -- report range 2025-06..2025-08 --both
+```
