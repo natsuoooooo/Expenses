@@ -1,10 +1,27 @@
 use ledger_module::{
-    Kind, add_entry, category_totals_by_kind, init_db, list_entries, month_summary, open_db,
+    add_entry, category_totals_by_kind, category_totals_by_kind_in_range,
+    delete_entry, init_db, list_entries, month_summary, open_db,
+    summary_in_range, Kind,
 };
 
 fn current_ym() -> String {
     let now = chrono::Local::now();
     now.format("%Y-%m").to_string()
+}
+
+fn parse_ym_range(s: &str) -> Option<(String, String)> {
+    let parts: Vec<&str> = s.split("..").collect();
+    if parts.len() != 2 {
+        return None
+    }
+
+    let a = parts[0];
+    let b = parts[1];
+    if a.len() == 7 && &a[4..5] == "-" && b.len() == 7 && &b[4..5] == "-" {
+        Some((a.to_string(), b.to_string()))
+    } else {
+        None
+    }
 }
 
 fn main() {
@@ -86,7 +103,7 @@ fn main() {
                     return;
                 }
             };
-            match ledger_module::delete_entry(&conn, id) {
+            match delete_entry(&conn, id) {
                 Ok(rows) if rows > 0 => println!("Entry deleted successfully."),
                 Ok(_) => println!("No entry found with ID: {}", id),
                 Err(e) => eprintln!("Failed to delete entry: {}", e),
@@ -171,7 +188,67 @@ fn main() {
                         }
                     }
                 }
+                "range" => {
+                    if args.len() < 4 {
+                        eprintln!("Usage: {} report range <YYYY-MM..YYYY-MM> [--income|--expense|--both]", args[0]);
+                        return;
+                    }
+                    let range = &args[3];
+                    let Some((start_ym, end_ym)) = parse_ym_range(range) else {
+                        eprintln!("Invalid range: {} (expected YYYY-MM..YYYY-MM)", range);
+                        return;
+                    };
 
+                    let flag = args.iter().find(|a| a.starts_with("--")).map(|s| s.as_str());
+
+                    match summary_in_range(&conn, &start_ym, &end_ym) {
+                        Ok(s) => {
+                            println!("== Summary {}..{} ==", s.start_month, s.end_month);
+                            println!("Income : {}", s.income);
+                            println!("Expense: {}", s.expense);
+                            println!("Balance: {}", s.balance);
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to get range summary: {}", e);
+                            return;
+                        }
+                    }
+
+                    match flag {
+                        Some("--both") => {
+                            let exp = category_totals_by_kind_in_range(&conn, &start_ym, &end_ym, Kind::Expense)
+                                .unwrap_or_default();
+                            let inc = category_totals_by_kind_in_range(&conn, &start_ym, &end_ym, Kind::Income)
+                                .unwrap_or_default();
+
+                            println!();
+                            println!("== Category Totals (Expense) {}..{} ==", start_ym, end_ym);
+                            if exp.is_empty() { println!("(no data)"); }
+                            for r in exp { println!("{:12} {}", r.category, r.total); }
+
+                            println!();
+                            println!("== Category Totals (Income)  {}..{} ==", start_ym, end_ym);
+                            if inc.is_empty() { println!("(no data)"); }
+                            for r in inc { println!("{:12} {}", r.category, r.total); }
+                        }
+                        Some("--income") => {
+                            let rows = category_totals_by_kind_in_range(&conn, &start_ym, &end_ym, Kind::Income)
+                                .unwrap_or_default();
+                            println!();
+                            println!("== Category Totals (Income) {}..{} ==", start_ym, end_ym);
+                            if rows.is_empty() { println!("(no data)"); }
+                            for r in rows { println!("{:12} {}", r.category, r.total); }
+                        }
+                        _ => {
+                            let rows = category_totals_by_kind_in_range(&conn, &start_ym, &end_ym, Kind::Expense)
+                                .unwrap_or_default();
+                            println!();
+                            println!("== Category Totals (Expense) {}..{} ==", start_ym, end_ym);
+                            if rows.is_empty() { println!("(no data)"); }
+                            for r in rows { println!("{:12} {}", r.category, r.total); }
+                        }
+                    }
+                }
                 _ => {
                     eprintln!(
                         "Unknown report type: {}. Use 'month' or 'category'.",
@@ -180,7 +257,6 @@ fn main() {
                 }
             }
         }
-
         _ => {
             eprintln!("Unknown command: {}. Use 'add' or 'list'.", args[1]);
         }
