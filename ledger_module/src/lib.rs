@@ -73,3 +73,7 @@ pub fn list_entries(conn: &Connection) -> rusqlite::Result<Vec<Entry>> {
     for r in rows { v.push(r?); }
     Ok(v)
 }
+
+pub fn delete_entry(conn: &Connection, id: i64) -> rusqlite::Result<usize> {
+    conn.execute("DELETE FROM entries WHERE id = ?1", params![id])
+}

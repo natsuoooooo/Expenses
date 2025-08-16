@@ -46,10 +46,28 @@ fn main() {
             match list_entries(&conn) {
                 Ok(entries) => {
                     for entry in entries {
-                        println!("{}: {} {} {} {}", entry.created_at, if entry.kind == Kind::Expense { "Expense" } else { "Income" }, entry.amount, entry.category, entry.note.as_deref().unwrap_or(""));
+                        println!("{}: {} {} {} {} [{}]", entry.created_at, if entry.kind == Kind::Expense { "Expense" } else { "Income" }, entry.amount, entry.category, entry.note.as_deref().unwrap_or(""), entry.id);
                     }
                 },
                 Err(e) => eprintln!("Failed to list entries: {}", e),
+            }
+        },
+        "delete" => {
+            if args.len() < 3 {
+                eprintln!("Usage: {} delete <id>", args[0]);
+                return;
+            }
+            let id: i64 = match args[2].parse() {
+                Ok(num) => num,
+                Err(_) => {
+                    eprintln!("Invalid ID: {}", args[2]);
+                    return;
+                }
+            };
+            match ledger_module::delete_entry(&conn, id) {
+                Ok(rows) if rows > 0 => println!("Entry deleted successfully."),
+                Ok(_) => println!("No entry found with ID: {}", id),
+                Err(e) => eprintln!("Failed to delete entry: {}", e),
             }
         },
         _ => {
