@@ -1,0 +1,6 @@
+target/
+**/*.rs.bk
+Cargo.lock
+ledger.db
+.DS_Store
+*.log
