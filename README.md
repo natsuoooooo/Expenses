@@ -14,6 +14,8 @@ Uses SQLite for storage, with a modular design:
 - Delete by ID
 - Monthly summary (income / expense / balance)
 - Category totals (per month, for expense / income / both)
+- Range summary across months
+- Export entries to CSV (UTF-8 with BOM for Excel compatibility)
 
 ---
 
@@ -75,4 +77,10 @@ cargo run -p cli -- report range 2025-06..2025-08 --income
 
 # Both (expense + income)
 cargo run -p cli -- report range 2025-06..2025-08 --both
+```
+
+### Export to CSV
+```bash
+# Export all entries to CSV (UTF-8 with BOM, Excel-friendly)
+cargo run -p cli -- export out.csv
 ```

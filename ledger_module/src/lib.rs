@@ -221,3 +221,50 @@ pub fn category_totals_by_kind_in_range(
     Ok(v)
 }
 
+pub fn entries_in_month(conn: &Connection, ym: &str) -> rusqlite::Result<Vec<Entry>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT id, kind, amount, category, note, created_at
+        FROM entries
+        WHERE substr(created_at, 1, 7) = ?1
+        ORDER BY datetime(created_at) ASC, id ASC
+        "#
+    )?;
+    let rows = stmt.query_map(params![ym], |row| {
+        Ok(Entry {
+            id: row.get(0)?,
+            kind: Kind::from_i64(row.get::<_, i64>(1)?),
+            amount: row.get(2)?,
+            category: row.get(3)?,
+            note: row.get::<_, Option<String>>(4)?,
+            created_at: row.get(5)?,
+        })
+    })?;
+    let mut v = Vec::new();
+    for r in rows { v.push(r?); }
+    Ok(v)
+}
+
+pub fn entries_in_range(conn: &Connection, start_ym: &str, end_ym: &str) -> rusqlite::Result<Vec<Entry>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT id, kind, amount, category, note, created_at
+        FROM entries
+        WHERE substr(created_at, 1, 7) BETWEEN ?1 AND ?2
+        ORDER BY datetime(created_at) ASC, id ASC
+        "#
+    )?;
+    let rows = stmt.query_map(params![start_ym, end_ym], |row| {
+        Ok(Entry {
+            id: row.get(0)?,
+            kind: Kind::from_i64(row.get::<_, i64>(1)?),
+            amount: row.get(2)?,
+            category: row.get(3)?,
+            note: row.get::<_, Option<String>>(4)?,
+            created_at: row.get(5)?,
+        })
+    })?;
+    let mut v = Vec::new();
+    for r in rows { v.push(r?); }
+    Ok(v)
+}

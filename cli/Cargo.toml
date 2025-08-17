@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 ledger_module = { path = "../ledger_module" }
 chrono = "=0.4.41"
+csv = "1"

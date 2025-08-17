@@ -1,7 +1,10 @@
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use csv::WriterBuilder;
 use ledger_module::{
     add_entry, category_totals_by_kind, category_totals_by_kind_in_range,
     delete_entry, init_db, list_entries, month_summary, open_db,
-    summary_in_range, Kind,
+    summary_in_range, Kind, entries_in_month, entries_in_range, Entry
 };
 
 fn current_ym() -> String {
@@ -12,7 +15,7 @@ fn current_ym() -> String {
 fn parse_ym_range(s: &str) -> Option<(String, String)> {
     let parts: Vec<&str> = s.split("..").collect();
     if parts.len() != 2 {
-        return None
+        return None;
     }
 
     let a = parts[0];
@@ -22,6 +25,31 @@ fn parse_ym_range(s: &str) -> Option<(String, String)> {
     } else {
         None
     }
+}
+
+fn write_csv(path: &str, rows: &[Entry]) -> csv::Result<()> {
+    let file = File::create(path)?;
+    let mut buf = BufWriter::new(file);
+
+    buf.write_all(b"\xEF\xBB\xBF")?;
+
+    let mut wtr = WriterBuilder::new().from_writer(buf);
+
+    wtr.write_record(&["id", "kind", "amount", "category", "note", "created_at"])?;
+
+    for e in rows {
+        let kind = if e.kind == Kind::Expense { "expense" } else { "income" };
+        wtr.write_record(&[
+            e.id.to_string(),
+            kind.to_string(),
+            e.amount.to_string(),
+            e.category.to_string(),
+            e.note.clone().unwrap_or_default(),
+            e.created_at.to_string(),
+        ])?;
+    }
+    wtr.flush()?;
+    Ok(())
 }
 
 fn main() {
@@ -257,8 +285,51 @@ fn main() {
                 }
             }
         }
+        "export" => {
+            if args.len() < 3 {
+                eprintln!("Usage: {} export <csv> <month|range> [YYYY-MM|YYYY-MM..YYYY-MM]", args[0]);
+                return;
+            }
+            match args[2].as_str() {
+                "csv" => {
+                    if args.len() < 4 {
+                        eprintln!("Usage: {} export csv <month [YYYY-MM]|range YYYY-MM..YYYY-MM>", args[0]);
+                        return;
+                    }
+                    match args[3].as_str() {
+                        "month" => {
+                            // 5番目に YYYY-MM があれば使い、無ければ当月
+                            let ym = if args.len() >= 5 { args[4].clone() } else { current_ym() };
+                            let rows = entries_in_month(&conn, &ym).expect("fetch month entries");
+                            let filename = format!("export_month_{}.csv", ym);
+                            write_csv(&filename, &rows).expect("write csv");
+                            println!("Exported to {}", filename);
+                        }
+                        "range" => {
+                            if args.len() < 5 {
+                                eprintln!("Usage: {} export csv range <YYYY-MM..YYYY-MM>", args[0]);
+                                return;
+                            }
+                            let range = &args[4];
+                            let Some((start_ym, end_ym)) = parse_ym_range(range) else {
+                                eprintln!("Invalid range: {} (expected YYYY-MM..YYYY-MM)", range);
+                                return;
+                            };
+                            let rows = entries_in_range(&conn, &start_ym, &end_ym).expect("fetch range entries");
+                            let filename = format!("export_range_{}..{}.csv", start_ym, end_ym);
+                            write_csv(&filename, &rows).expect("write csv");
+                                println!("Exported to {}", filename);
+                        }
+                        _ => {
+                            eprintln!("Usage: {} export csv <month|range> ...", args[0]);
+                        }
+                    }
+                }
+                _ => eprintln!("Usage: {} export <csv> ...", args[0]),
+            }
+        }
         _ => {
-            eprintln!("Unknown command: {}. Use 'add' or 'list'.", args[1]);
+            eprintln!("Unknown command: {}", args[1]);
         }
     }
 }
