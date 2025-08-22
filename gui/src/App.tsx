@@ -13,9 +13,10 @@ type Row = {
 export default function App() {
   const [rows, setRows] = useState<Row[]>([]);
   const [kind, setKind] = useState<"expense" | "income">("expense");
-  const [amount, setAmount] = useState<string>("");
-  const [category, setCategory] = useState<string>("");
-  const [note, setNote] = useState<string>("");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("");
+  const [note, setNote] = useState("");
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   async function refresh() {
     const res = (await invoke("list")) as Row[];
@@ -40,7 +41,21 @@ export default function App() {
     await refresh();
   }
 
-  useEffect(() => { refresh(); }, []);
+  async function onDelete(id: number) {
+    if (!confirm(`Delete entry #${id}?`)) return;
+    try {
+      setBusyId(id);
+      const ok = (await invoke("delete", { id })) as boolean;
+      if (!ok) alert("No entry deleted (already removed?)");
+      await refresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", padding: 24 }}>
@@ -76,8 +91,18 @@ export default function App() {
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead>
           <tr>
-            {["id", "kind", "amount", "category", "note", "created_at"].map((h) => (
-              <th key={h} style={{ border: "1px solid #ddd", padding: 8, textAlign: "left", background: "#f7f7f7" }}>{h}</th>
+            {["id", "kind", "amount", "category", "note", "created_at", "actions"].map((h) => (
+              <th
+                key={h}
+                style={{
+                  border: "1px solid #ddd",
+                  padding: 8,
+                  textAlign: "left",
+                  background: "#f7f7f7",
+                }}
+              >
+                {h}
+              </th>
             ))}
           </tr>
         </thead>
@@ -90,10 +115,23 @@ export default function App() {
               <td style={{ border: "1px solid #ddd", padding: 8 }}>{e.category}</td>
               <td style={{ border: "1px solid #ddd", padding: 8 }}>{e.note ?? ""}</td>
               <td style={{ border: "1px solid #ddd", padding: 8 }}>{e.created_at}</td>
+              <td style={{ border: "1px solid #ddd", padding: 8 }}>
+                <button
+                  onClick={() => onDelete(e.id)}
+                  disabled={busyId === e.id}
+                  title="Delete this entry"
+                >
+                  {busyId === e.id ? "Deleting..." : "Delete"}
+                </button>
+              </td>
             </tr>
           ))}
           {rows.length === 0 && (
-            <tr><td colSpan={6} style={{ padding: 16, textAlign: "center", color: "#666" }}>(no data)</td></tr>
+            <tr>
+              <td colSpan={7} style={{ padding: 16, textAlign: "center", color: "#666" }}>
+                (no data)
+              </td>
+            </tr>
           )}
         </tbody>
       </table>

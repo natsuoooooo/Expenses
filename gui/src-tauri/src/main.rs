@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use ledger_module::{init_db, open_db, list_entries, add_entry, Kind};
+use ledger_module::{init_db, open_db, list_entries, add_entry, delete_entry,Kind};
 use tauri::{Manager, WindowEvent};
 
 #[tauri::command]
@@ -35,6 +35,14 @@ fn add(kind: String, amount: i64, category: String, note: Option<String>) -> Res
     add_entry(&conn, kind, amount, &category, note.as_deref()).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn delete(id: i64) -> Result<bool, String> {
+    let conn = open_db().map_err(|e| e.to_string())?;
+    init_db(&conn).map_err(|e| e.to_string())?;
+    let affected = delete_entry(&conn, id).map_err(|e| e.to_string())?;
+    Ok(affected > 0)
+}
+
 fn main() {
   tauri::Builder::default()
     .setup(|app| {
@@ -53,7 +61,7 @@ fn main() {
         }
       }
     })
-    .invoke_handler(tauri::generate_handler![list, add])
+    .invoke_handler(tauri::generate_handler![list, add, delete])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
