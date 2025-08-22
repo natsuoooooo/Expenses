@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from "recharts";
+
 
 type Row = {
   id: number;
@@ -9,6 +13,8 @@ type Row = {
   note?: string | null;
   created_at: string;
 };
+type Summary = { month: string; income: number; expense: number; balance: number };
+type CatRow = { category: string; total: number };
 
 export default function App() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -17,6 +23,14 @@ export default function App() {
   const [category, setCategory] = useState("");
   const [note, setNote] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [ym, setYm] = useState(() => {
+  const d = new Date();
+  const mm = String(d.getMonth()+1).padStart(2, "0");
+    return `${d.getFullYear()}-${mm}`;
+  });
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [kindTab, setKindTab] = useState<"expense"|"income">("expense");
+  const [cats, setCats] = useState<CatRow[]>([]);
 
   async function refresh() {
     const res = (await invoke("list")) as Row[];
@@ -53,6 +67,22 @@ export default function App() {
     }
   }
 
+  async function loadSummaryAndCats(y: string, k: "expense"|"income") {
+    const s = (await invoke("get_month_summary", { ym: y })) as Summary;
+    const c = (await invoke("get_category_totals", { ym: y, kind: k })) as CatRow[];
+    setSummary(s);
+    setCats(c);
+  }
+
+  useEffect(() => { // 初回
+    loadSummaryAndCats(ym, kindTab);
+    refresh(); // 既存の一覧ロード
+  }, []);
+
+  useEffect(() => { // 月 or タブが変わったら再ロード
+    loadSummaryAndCats(ym, kindTab);
+  }, [ym, kindTab]);
+
   useEffect(() => {
     refresh();
   }, []);
@@ -87,6 +117,57 @@ export default function App() {
         <button onClick={onAdd}>Add</button>
         <button onClick={refresh}>Reload</button>
       </div>
+
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
+        <input
+          type="month"
+          value={ym}
+          onChange={(e) => setYm(e.target.value)}
+        />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setKindTab("expense")}
+            style={{ padding: "6px 10px", background: kindTab==="expense" ? "#222" : "#eee", color: kindTab==="expense"?"#fff":"#000", border: "1px solid #ccc", borderRadius: 6 }}
+          >Expense</button>
+          <button
+            onClick={() => setKindTab("income")}
+            style={{ padding: "6px 10px", background: kindTab==="income" ? "#222" : "#eee", color: kindTab==="income"?"#fff":"#000", border: "1px solid #ccc", borderRadius: 6 }}
+          >Income</button>
+        </div>
+      </div>
+
+      {summary && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+          <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
+            <div style={{ color: "#666" }}>Income</div>
+            <div style={{ fontSize: 24, fontWeight: 700 }}>{summary.income.toLocaleString()}</div>
+          </div>
+          <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
+            <div style={{ color: "#666" }}>Expense</div>
+            <div style={{ fontSize: 24, fontWeight: 700 }}>{summary.expense.toLocaleString()}</div>
+          </div>
+          <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
+            <div style={{ color: "#666" }}>Balance</div>
+            <div style={{ fontSize: 24, fontWeight: 700 }}>{summary.balance.toLocaleString()}</div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ height: 280, border: "1px solid #eee", borderRadius: 12, padding: 8, marginBottom: 16 }}>
+        <div style={{ padding: "0 8px 8px", fontWeight: 600 }}>
+          Category totals ({kindTab}) – {ym}
+        </div>
+        <ResponsiveContainer width="100%" height="90%">
+          <BarChart data={cats}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="category" />
+            <YAxis />
+            <Tooltip />
+            <Bar dataKey="total" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
 
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead>
